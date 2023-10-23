@@ -16,8 +16,8 @@ import (
 
 type Service interface {
 	Migrate()
-	GetData(limit int, conditions *person.Person) ([]person.Person, error)
-	AddPerson(name string, surname string, patronymic string, age int, gender string, country string) error
+	GetData(int, int, *person.Person) ([]person.Person, error)
+	AddPerson(string, string, string, int, string, string) error
 }
 
 type Endpoint struct {
@@ -32,13 +32,13 @@ func (e *Endpoint) HandlerGetData(ctx echo.Context) error {
 	errLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lmicroseconds)
 
 	params := ctx.QueryParams()
-	limit, conditions, err := e.parseParam(params)
+	page, pageSize, conditions, err := e.parseParam(params)
 	if err != nil {
 		errLog.Println("func HandlerGetData: ", err)
 		return err
 	}
 
-	result, err := e.svc.GetData(limit, conditions)
+	result, err := e.svc.GetData(page, pageSize, conditions)
 	if err != nil {
 		errLog.Println("func HandlerGetData: ", err)
 		return err
@@ -117,26 +117,33 @@ func (e *Endpoint) HandlerAddPerson(ctx echo.Context) error {
 	return nil
 }
 
-func (e *Endpoint) parseParam(p url.Values) (int, *person.Person, error) {
-	limit := -1
+func (e *Endpoint) parseParam(p url.Values) (int, int, *person.Person, error) {
 	age := 0
+	pageSize := -1
+	page := -1
 	var err error
 
-	if p.Get("limit") != "" {
-		limit, err = strconv.Atoi(p.Get("limit"))
+	if p.Get("page") != "" {
+		page, err = strconv.Atoi(p.Get("page"))
 		if err != nil {
-			return 0, nil, err
+			return 0, 0, nil, err
+		}
+	}
+	if p.Get("pageSize") != "" {
+		pageSize, err = strconv.Atoi(p.Get("pageSize"))
+		if err != nil {
+			return 0, 0, nil, err
 		}
 	}
 
 	if p.Get("age") != "" {
 		age, err = strconv.Atoi(p.Get("age"))
 		if err != nil {
-			return 0, nil, err
+			return 0, 0, nil, err
 		}
 	}
 
-	return limit, person.New(p.Get("name"), p.Get("surname"), p.Get("patronymic"), age, p.Get("gender"), p.Get("country")), nil
+	return page, pageSize, person.New(p.Get("name"), p.Get("surname"), p.Get("patronymic"), age, p.Get("gender"), p.Get("country")), nil
 }
 
 func unmarshalAny(url string, v any) {

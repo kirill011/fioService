@@ -40,12 +40,19 @@ func (base *Service) Migrate() {
 }
 
 // функция возвращает []Person из базы данных по заданным условиям
-func (base *Service) GetData(limit int, conditions *person.Person) ([]person.Person, error) {
+func (base *Service) GetData(page int, pageSize int, conditions *person.Person) ([]person.Person, error) {
 	var person []person.Person
+
+	offset := 0
+
+	if pageSize != -1 && page != -1 {
+		offset = pageSize * (page - 1)
+	}
+	limit := pageSize
 
 	//если conditions содержит нулевые поля ("" для string, 0 для int), то такие поля не будут использоваться в Where
 	//если limit = -1, то он будет игнорироваться
-	result := base.db.Select("Name", "Surname", "Patronymic", "Age", "Gender", "Country").Where(&conditions).Limit(limit).Find(&person)
+	result := base.db.Select("ID", "Name", "Surname", "Patronymic", "Age", "Gender", "Country").Where(&conditions).Offset(offset).Limit(limit).Find(&person)
 	if result.Error != nil {
 		return nil, result.Error
 	}
