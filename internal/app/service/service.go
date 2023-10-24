@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type Service struct {
@@ -17,17 +19,43 @@ type Service struct {
 
 func New() *Service {
 	errLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lmicroseconds)
-
+	newLogger := logger.New(
+		log.New(os.Stdout, "INFO\t DATABASE\t", log.Ldate|log.Ltime|log.Lmicroseconds),
+		logger.Config{
+			SlowThreshold:             1 * time.Second,
+			LogLevel:                  logger.Info,
+			IgnoreRecordNotFoundError: true,
+			ParameterizedQueries:      true,
+			Colorful:                  true,
+		},
+	)
 	err := godotenv.Load()
 	if err != nil {
 		errLog.Fatal("func service.New: ", err)
 	}
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=%s", os.Getenv("host"), os.Getenv("user"), os.Getenv("password"), os.Getenv("dbname"), os.Getenv("port"), os.Getenv("sslmode"), os.Getenv("timezone"))
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	dbName := os.Getenv("dbname")
+
+	dsn := fmt.Sprintf("host=%s user=%s password=%s port=%s sslmode=%s TimeZone=%s", os.Getenv("host"), os.Getenv("user"), os.Getenv("password"), os.Getenv("port"), os.Getenv("sslmode"), os.Getenv("timezone"))
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: newLogger,
+	})
 	if err != nil {
 		errLog.Fatal("func service.New: ", err)
 	}
+
+	dbs := fmt.Sprintf("%s dbname=%s", dsn, dbName)
+	count := 0
+	db.Raw("SELECT count(*) FROM pg_database WHERE datname = ?", dbName).Scan(&count)
+	if count == 0 {
+		sql := fmt.Sprintf("CREATE DATABASE %s;", dbName)
+		db.Exec(sql)
+	}
+
+	db, err = gorm.Open(postgres.Open(dbs), &gorm.Config{
+		Logger: newLogger,
+	})
+
 	return &Service{db}
 }
 
