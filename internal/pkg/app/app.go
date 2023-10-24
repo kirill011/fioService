@@ -27,7 +27,6 @@ func New() (*App, error) {
 
 	a.echo = echo.New()
 
-	a.echo.GET("/", a.e.HandlerMain)
 	a.echo.GET("/getData", a.e.HandlerGetData)
 	a.echo.POST("/addPerson", a.e.HandlerAddPerson)
 	a.echo.DELETE("/deletePerson", a.e.HandlerDelPerson)
