@@ -29,7 +29,8 @@ func New() (*App, error) {
 
 	a.echo.GET("/getData", a.e.HandlerGetData)
 	a.echo.POST("/addPerson", a.e.HandlerAddPerson)
-
+	a.echo.DELETE("/deletePerson", a.e.HandlerDelPerson)
+	a.echo.PUT("/updatePerson", a.e.HandlerUpdatePerson)
 	return a, nil
 }
 
