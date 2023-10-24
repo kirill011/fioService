@@ -18,7 +18,7 @@ type Service interface {
 	Migrate()
 	GetData(int, int, *person.Person) ([]person.Person, error)
 	AddPerson(string, string, string, int, string, string) error
-	DelPerson(id int) error
+	DelPerson(id int) (int64, error)
 	UpdatePerson(id int, person *person.Person) error
 }
 
@@ -39,18 +39,20 @@ func New(svc Service) *Endpoint {
 // обработчик запроса на отображение данных из бд
 func (e *Endpoint) HandlerGetData(ctx echo.Context) error {
 	errLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lmicroseconds)
+	debugLog := log.New(os.Stdout, "DEBUG\t", log.Ldate|log.Ltime|log.Lmicroseconds)
 
 	params := ctx.QueryParams()
 	page, pageSize, conditions, err := e.parseParam(params)
 	if err != nil {
 		errLog.Println("func HandlerGetData: ", err)
-		return err
+		return ctx.JSON(http.StatusOK, "invalid params: "+err.Error())
 	}
+	debugLog.Println(fmt.Sprintf("HandlerGetData page = %d, pageSize = %d, conditions = %+v", page, pageSize, conditions))
 
 	result, err := e.svc.GetData(page, pageSize, conditions)
 	if err != nil {
 		errLog.Println("func HandlerGetData: ", err)
-		return err
+		return ctx.JSON(http.StatusOK, "Database error: "+err.Error())
 	}
 
 	return ctx.JSON(http.StatusOK, result)
@@ -59,6 +61,7 @@ func (e *Endpoint) HandlerGetData(ctx echo.Context) error {
 // Обработчик запроса на добавление
 func (e *Endpoint) HandlerAddPerson(ctx echo.Context) error {
 	errLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lmicroseconds)
+	debugLog := log.New(os.Stdout, "DEBUG\t", log.Ldate|log.Ltime|log.Lmicroseconds)
 
 	param := ctx.QueryParam("fio")
 
@@ -67,13 +70,14 @@ func (e *Endpoint) HandlerAddPerson(ctx echo.Context) error {
 	err := json.Unmarshal([]byte(param), FioJson)
 	if err != nil {
 		errLog.Println("func HandlerAddPerson: ", err)
-		return err
+		return ctx.JSON(http.StatusOK, "Invalid JSON: "+err.Error())
 	}
+	debugLog.Println(fmt.Sprintf("HandlerAddPerson FioJson = %+v", FioJson))
 
 	err = e.svc.AddPerson(FioJson.Name, FioJson.Surname, FioJson.Patronymic, getAge(FioJson), getGender(FioJson), getCountry(FioJson))
 	if err != nil {
 		errLog.Println("func HandlerAddPerson: ", err)
-		return err
+		return ctx.JSON(http.StatusOK, "Database error: "+err.Error())
 	}
 
 	return ctx.JSON(http.StatusOK, "OK")
@@ -82,25 +86,31 @@ func (e *Endpoint) HandlerAddPerson(ctx echo.Context) error {
 // Обработчик запроса на удаление
 func (e *Endpoint) HandlerDelPerson(ctx echo.Context) error {
 	errLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lmicroseconds)
+	debugLog := log.New(os.Stdout, "DEBUG\t", log.Ldate|log.Ltime|log.Lmicroseconds)
 
 	delId, err := strconv.Atoi(ctx.QueryParam("id"))
 	if err != nil {
 		errLog.Println("func HandlerDelPerson: ", err)
-		return err
+		return ctx.JSON(http.StatusOK, "Invalid params: "+err.Error())
 	}
 
-	err = e.svc.DelPerson(delId)
+	debugLog.Println(fmt.Sprintf("HandlerDelPerson delId = %d", delId))
+
+	delRows, err := e.svc.DelPerson(delId)
 	if err != nil {
 		errLog.Println("func HandlerDelPerson: ", err)
-		return err
+		return ctx.JSON(http.StatusOK, "Database error: "+err.Error())
 	}
 
-	return ctx.JSON(http.StatusOK, "OK")
+	debugLog.Println(fmt.Sprintf("HandlerDelPerson deleted %d rows", delRows))
+
+	return ctx.JSON(http.StatusOK, "Deleted "+strconv.FormatInt(delRows, 10)+" rows")
 }
 
 // обработчик запроса на обновление
 func (e *Endpoint) HandlerUpdatePerson(ctx echo.Context) error {
 	errLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lmicroseconds)
+	debugLog := log.New(os.Stdout, "DEBUG\t", log.Ldate|log.Ltime|log.Lmicroseconds)
 
 	params := ctx.QueryParams()
 	id := 0
@@ -110,25 +120,29 @@ func (e *Endpoint) HandlerUpdatePerson(ctx echo.Context) error {
 		id, err = strconv.Atoi(idStr)
 		if err != nil {
 			errLog.Println("func HandlerUpdatePerson: ", err)
-			return err
+			return ctx.JSON(http.StatusOK, "Invalid param id: "+err.Error())
 		}
 	}
 	_, _, updateParams, err := e.parseParam(params)
 	if err != nil {
 		errLog.Println("func HandlerUpdatePerson: ", err)
-		return err
+		return ctx.JSON(http.StatusOK, "Invalid params: "+err.Error())
 	}
+
+	debugLog.Println(fmt.Sprintf("HandlerUpdatePerson id = %d, updateParams = %+v", id, updateParams))
 
 	err = e.svc.UpdatePerson(id, updateParams)
 	if err != nil {
 		errLog.Println("func HandlerUpdatePerson: ", err)
-		return err
+		return ctx.JSON(http.StatusOK, "Database error: "+err.Error())
 	}
 
 	return ctx.JSON(http.StatusOK, "OK")
 }
 
 func (e *Endpoint) parseParam(p url.Values) (int, int, *person.Person, error) {
+	debugLog := log.New(os.Stdout, "DEBUG\t", log.Ldate|log.Ltime|log.Lmicroseconds)
+
 	age := 0
 	pageSize := -1
 	page := -1
@@ -154,7 +168,11 @@ func (e *Endpoint) parseParam(p url.Values) (int, int, *person.Person, error) {
 		}
 	}
 
-	return page, pageSize, person.New(p.Get("name"), p.Get("surname"), p.Get("patronymic"), age, p.Get("gender"), p.Get("country")), nil
+	pers := person.New(p.Get("name"), p.Get("surname"), p.Get("patronymic"), age, p.Get("gender"), p.Get("country"))
+
+	debugLog.Println(fmt.Sprintf("parseParam page = %d, pageSize = %d, pers = %+v", page, pageSize, pers))
+
+	return page, pageSize, pers, nil
 }
 
 func unmarshalAny(url string, v any) {

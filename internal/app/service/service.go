@@ -72,12 +72,12 @@ func (base *Service) AddPerson(name string, surname string, patronymic string, a
 	return nil
 }
 
-func (base *Service) DelPerson(id int) error {
+func (base *Service) DelPerson(id int) (int64, error) {
 	result := base.db.Delete(&person.Person{}, id)
 	if result.Error != nil {
-		return result.Error
+		return 0, result.Error
 	}
-	return nil
+	return result.RowsAffected, nil
 }
 
 func (base *Service) UpdatePerson(id int, person *person.Person) error {
